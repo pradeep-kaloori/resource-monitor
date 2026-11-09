@@ -9,6 +9,7 @@ A lightweight, native macOS app that continuously monitors your Mac's resources,
 - **Per-core CPU load** bars
 - **Memory breakdown** donut: app, wired, compressed, cached, free
 - **Network** upload and download throughput
+- **Disk metrics**: live read/write throughput chart, used/free/purgeable capacity donut, and a heavy-write warning
 - **Top apps by memory**, with helper processes (Chrome, Slack, Docker VM) grouped under their parent app
 - **Suggestions panel** that turns live numbers into actions, such as "Quit Docker when you don't need containers"
 - **Menu bar readout** (`CPU % MEM %`) so you can see load without opening the window
@@ -63,6 +64,7 @@ Contributions are welcome.
 Ideas:
 
 - GPU and battery/thermal stats
+- Biggest folders by size (disk usage drill-down)
 - Per-process disk I/O
 - Configurable refresh interval and alert thresholds with notifications
 - One-click "quit this app" from the suggestions list

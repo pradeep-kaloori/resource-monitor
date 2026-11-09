@@ -83,7 +83,8 @@ struct DashboardView: View {
                 topRow
                 HStack(alignment: .top, spacing: 14) { cpuChart; memChart }
                 HStack(alignment: .top, spacing: 14) { coresCard; memBreakdown }
-                HStack(alignment: .top, spacing: 14) { netChart; topApps }
+                HStack(alignment: .top, spacing: 14) { netChart; diskIOChart }
+                HStack(alignment: .top, spacing: 14) { diskCapacity; topApps }
                 tipsCard
             }
             .padding(16)
@@ -191,8 +192,42 @@ struct DashboardView: View {
         }
     }
 
+    var diskIOChart: some View {
+        Card(title: "Disk I/O  read \(rate(m.samples.last?.diskRead ?? 0))  write \(rate(m.samples.last?.diskWrite ?? 0))") {
+            Chart {
+                ForEach(m.samples) {
+                    LineMark(x: .value("t", $0.time), y: .value("B/s", $0.diskRead), series: .value("d", "Read")).foregroundStyle(.cyan)
+                    LineMark(x: .value("t", $0.time), y: .value("B/s", $0.diskWrite), series: .value("d", "Write")).foregroundStyle(.orange)
+                }
+            }
+            .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(rate(d)) } } } }
+            .frame(height: 150)
+        }
+    }
+
+    var diskCapacity: some View {
+        let parts: [(String, Double, Color)] = [("Used", m.diskUsedGB, .blue), ("Free", m.diskFreeGB, .gray.opacity(0.4))]
+        return Card(title: "Disk capacity (GB)") {
+            HStack {
+                Chart(parts, id: \.0) { p in
+                    SectorMark(angle: .value("GB", p.1), innerRadius: .ratio(0.6), angularInset: 1).foregroundStyle(p.2)
+                }
+                .frame(width: 150, height: 150)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(parts, id: \.0) { p in
+                        HStack { Circle().fill(p.2).frame(width: 9, height: 9); Text(p.0); Spacer(); Text(String(format: "%.0f", p.1)).monospacedDigit() }
+                    }
+                    HStack { Text("Total"); Spacer(); Text(String(format: "%.0f", m.diskTotalGB)).monospacedDigit() }
+                    if m.diskPurgeableGB > 0.5 {
+                        Text(String(format: "%.1f GB purgeable", m.diskPurgeableGB)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
     func rate(_ b: Double) -> String {
-        b > 1_000_000 ? String(format: "%.1f MB/s", b / 1e6) : String(format: "%.0f KB/s", b / 1e3)
+        b > 1_000_000_000 ? String(format: "%.2f GB/s", b / 1e9) : b > 1_000_000 ? String(format: "%.1f MB/s", b / 1e6) : String(format: "%.0f KB/s", b / 1e3)
     }
 
     var topApps: some View {

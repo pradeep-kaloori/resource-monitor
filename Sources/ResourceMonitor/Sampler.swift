@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import IOKit
 
 struct Sample: Identifiable {
     let id = UUID()
@@ -8,6 +9,8 @@ struct Sample: Identifiable {
     let memUsed: Double      // 0-100
     let netDown: Double      // bytes/s
     let netUp: Double        // bytes/s
+    let diskRead: Double     // bytes/s
+    let diskWrite: Double    // bytes/s
 }
 
 struct AppUsage: Identifiable {
@@ -32,12 +35,15 @@ final class Monitor: ObservableObject {
     @Published var mem = MemBreakdown()
     @Published var diskUsedGB = 0.0
     @Published var diskTotalGB = 0.0
+    @Published var diskFreeGB = 0.0
+    @Published var diskPurgeableGB = 0.0
     @Published var apps: [AppUsage] = []
     @Published var tips: [String] = []
     @Published var cpuHistoryAvg = 0.0
 
     private var prevTicks: [[UInt32]] = []
     private var prevNet: (UInt64, UInt64, Date)?
+    private var prevDisk: (UInt64, UInt64, Date)?
     private var timer: Timer?
     private var tick = 0
     private var started = false
@@ -58,9 +64,10 @@ final class Monitor: ObservableObject {
         let cpu = readCPU()
         readMemory()
         let net = readNet()
+        let dio = readDiskIO()
         if tick % 2 == 1 { readDisk() }
         let s = Sample(time: Date(), cpu: cpu, memUsed: mem.total > 0 ? (mem.app + mem.wired + mem.compressed) / mem.total * 100 : 0,
-                       netDown: net.0, netUp: net.1)
+                       netDown: net.0, netUp: net.1, diskRead: dio.0, diskWrite: dio.1)
         samples.append(s)
         if samples.count > maxSamples { samples.removeFirst(samples.count - maxSamples) }
         cpuHistoryAvg = samples.map(\.cpu).reduce(0, +) / Double(samples.count)
@@ -124,11 +131,36 @@ final class Monitor: ObservableObject {
     // MARK: Disk
     private func readDisk() {
         let url = URL(fileURLWithPath: "/")
-        if let v = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey]),
+        if let v = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey]),
            let t = v.volumeTotalCapacity, let a = v.volumeAvailableCapacityForImportantUsage {
             diskTotalGB = Double(t) / 1e9
             diskUsedGB = (Double(t) - Double(a)) / 1e9
+            diskFreeGB = Double(a) / 1e9
+            // Space macOS can reclaim on demand (caches, local snapshots)
+            diskPurgeableGB = max(0, Double(a) - Double(v.volumeAvailableCapacity ?? Int(a))) / 1e9
         }
+    }
+
+    private func readDiskIO() -> (Double, Double) {
+        var it: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &it) == KERN_SUCCESS else { return (0, 0) }
+        defer { IOObjectRelease(it) }
+        var r: UInt64 = 0, w: UInt64 = 0
+        var e = IOIteratorNext(it)
+        while e != 0 {
+            if let d = IORegistryEntryCreateCFProperty(e, "Statistics" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any] {
+                r += (d["Bytes (Read)"] as? NSNumber)?.uint64Value ?? 0
+                w += (d["Bytes (Write)"] as? NSNumber)?.uint64Value ?? 0
+            }
+            IOObjectRelease(e)
+            e = IOIteratorNext(it)
+        }
+        let now = Date()
+        defer { prevDisk = (r, w, now) }
+        guard let p = prevDisk else { return (0, 0) }
+        let dt = now.timeIntervalSince(p.2)
+        guard dt > 0 else { return (0, 0) }
+        return (Double(r &- p.0) / dt, Double(w &- p.1) / dt)
     }
 
     // MARK: Network
@@ -214,6 +246,7 @@ final class Monitor: ObservableObject {
         if let c = apps.first(where: { $0.name == "Google Chrome" }), c.procs > 15 {
             t.append("Chrome has \(c.procs) processes. Close unused tabs or turn on Memory Saver.")
         }
+        if let l = samples.last, l.diskWrite > 100e6 { t.append(String(format: "Heavy disk writes (%.0f MB/s). Check for builds, Docker image pulls or backups running.", l.diskWrite / 1e6)) }
         if diskTotalGB > 0, diskUsedGB / diskTotalGB > 0.85 { t.append("Disk is over 85% full. Empty the Trash and clear caches.") }
         if t.isEmpty { t.append("Everything looks healthy.") }
         return t

@@ -86,6 +86,7 @@ struct DashboardView: View {
                 HStack(alignment: .top, spacing: 14) { netChart; diskIOChart }
                 HStack(alignment: .top, spacing: 14) { diskCapacity; topApps }
                 tipsCard
+                actionsCard
             }
             .padding(16)
         }
@@ -247,6 +248,37 @@ struct DashboardView: View {
             ForEach(m.tips, id: \.self) { t in
                 Label(t, systemImage: "lightbulb.fill").symbolRenderingMode(.multicolor).font(.callout)
             }
+        }
+    }
+}
+
+struct ActionRow: View {
+    @EnvironmentObject var m: Monitor
+    let app: RunningApp
+    @State private var confirm = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let i = app.icon { Image(nsImage: i).resizable().frame(width: 24, height: 24) }
+            Text(app.name).lineLimit(1)
+            Spacer()
+            Text(String(format: "%.1f GB", app.memMB / 1024)).monospacedDigit().foregroundStyle(.secondary)
+            Text(String(format: "%.0f%% CPU", app.cpu)).monospacedDigit().foregroundStyle(color(for: min(app.cpu, 100))).frame(width: 80, alignment: .trailing)
+            Button("Quit") { confirm = true }
+                .confirmationDialog("Quit \(app.name)?", isPresented: $confirm) {
+                    Button("Quit") { m.quit(app) }
+                    Button("Force Quit (unsaved work is lost)", role: .destructive) { m.forceQuit(app) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { Text("Quit asks the app to close normally so it can save. Force Quit ends it immediately.") }
+        }
+    }
+}
+
+extension DashboardView {
+    var actionsCard: some View {
+        Card(title: "Actions: close apps to free resources (heaviest first)") {
+            if m.runningApps.isEmpty { Text("Loading…").foregroundStyle(.secondary) }
+            ForEach(m.runningApps) { ActionRow(app: $0) }
         }
     }
 }

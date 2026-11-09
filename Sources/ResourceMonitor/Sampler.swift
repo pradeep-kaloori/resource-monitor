@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import IOKit
+import AppKit
 
 struct Sample: Identifiable {
     let id = UUID()
@@ -21,6 +22,15 @@ struct AppUsage: Identifiable {
     var procs: Int
 }
 
+struct RunningApp: Identifiable {
+    var id: pid_t { app.processIdentifier }
+    let app: NSRunningApplication
+    let name: String
+    let icon: NSImage?
+    let cpu: Double
+    let memMB: Double
+}
+
 struct MemBreakdown {
     var app = 0.0, wired = 0.0, compressed = 0.0, cached = 0.0, free = 0.0   // GB
     var total = 0.0
@@ -39,6 +49,7 @@ final class Monitor: ObservableObject {
     @Published var diskPurgeableGB = 0.0
     @Published var apps: [AppUsage] = []
     @Published var tips: [String] = []
+    @Published var runningApps: [RunningApp] = []
     @Published var cpuHistoryAvg = 0.0
 
     private var prevTicks: [[UInt32]] = []
@@ -192,6 +203,7 @@ final class Monitor: ObservableObject {
             let out = Monitor.runPS()
             await MainActor.run {
                 self.apps = out
+                self.runningApps = self.buildRunningApps()
                 self.tips = self.buildTips()
             }
         }
@@ -226,6 +238,26 @@ final class Monitor: ObservableObject {
         }
         return (path as NSString).lastPathComponent
     }
+
+    // MARK: Actions
+    private func buildRunningApps() -> [RunningApp] {
+        let byName = Dictionary(uniqueKeysWithValues: apps.map { ($0.name, $0) })
+        let vm = byName.first { $0.key.hasPrefix("Virtual Machine") }?.value
+        let protected: Set<String> = ["com.apple.finder", Bundle.main.bundleIdentifier ?? ""]
+        let list = NSWorkspace.shared.runningApplications.compactMap { a -> RunningApp? in
+            guard a.activationPolicy == .regular, let id = a.bundleIdentifier, !protected.contains(id),
+                  let file = a.bundleURL?.deletingPathExtension().lastPathComponent else { return nil }
+            let u = byName[file]
+            var mem = u?.memMB ?? 0, cpu = u?.cpu ?? 0
+            // Docker Desktop's VM runs outside the app bundle, so credit it to Docker
+            if file.hasPrefix("Docker"), let vm { mem += vm.memMB; cpu += vm.cpu }
+            return RunningApp(app: a, name: a.localizedName ?? file, icon: a.icon, cpu: cpu, memMB: mem)
+        }
+        return Array(list.sorted { $0.memMB > $1.memMB }.prefix(10))
+    }
+
+    func quit(_ a: RunningApp) { a.app.terminate() }
+    func forceQuit(_ a: RunningApp) { a.app.forceTerminate() }
 
     // MARK: Advice
     private func buildTips() -> [String] {

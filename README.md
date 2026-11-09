@@ -4,6 +4,10 @@
 
 A lightweight, native macOS app that continuously monitors your Mac's resources, shows them with live graphics, and tells you what to close to reduce load. Built with SwiftUI and Swift Charts, with no third-party dependencies.
 
+![Dashboard: gauges, history charts, memory breakdown, network and disk I/O](docs/dashboard-top.png)
+
+![Disk capacity, top apps, suggestions and the Actions panel](docs/dashboard-actions.png)
+
 ## Features
 
 - **Ring gauges** for CPU, memory and disk, plus a memory-pressure indicator and swap usage

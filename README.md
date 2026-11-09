@@ -1,5 +1,7 @@
 # Resource Monitor
 
+[![Build](https://github.com/pradeep-kaloori/resource-monitor/actions/workflows/build.yml/badge.svg)](https://github.com/pradeep-kaloori/resource-monitor/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A lightweight, native macOS app that continuously monitors your Mac's resources, shows them with live graphics, and tells you what to close to reduce load. Built with SwiftUI and Swift Charts, with no third-party dependencies.
 
 ## Features
@@ -31,6 +33,10 @@ A lightweight, native macOS app that continuously monitors your Mac's resources,
 
 ## Install and use
 
+No toolchain? Download the prebuilt app from [Releases](https://github.com/pradeep-kaloori/resource-monitor/releases), unzip it, then right-click and choose **Open** on first launch.
+
+Or build from source:
+
 ```bash
 git clone https://github.com/pradeep-kaloori/resource-monitor.git
 cd resource-monitor
@@ -55,7 +61,7 @@ Sources/ResourceMonitor/App.swift     SwiftUI dashboard, charts, menu bar item
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [good first issues](https://github.com/pradeep-kaloori/resource-monitor/labels/good%20first%20issue).
 
 1. Fork the repo and create a branch: `git checkout -b feature/my-change`
 2. Make your change and verify it builds: `./build.sh`
